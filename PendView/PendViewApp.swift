@@ -24,6 +24,25 @@ struct PendViewApp: App {
                 Button("Previous") { model.previous() }
                     .keyboardShortcut(.leftArrow, modifiers: [])
             }
+            CommandMenu("View") {
+                Button("Zoom In") {
+                    NotificationCenter.default.post(name: .pvZoomIn, object: nil)
+                }
+                .keyboardShortcut("=", modifiers: [.command])
+                Button("Zoom Out") {
+                    NotificationCenter.default.post(name: .pvZoomOut, object: nil)
+                }
+                .keyboardShortcut("-", modifiers: [.command])
+                Divider()
+                Button("Fit to Window") {
+                    NotificationCenter.default.post(name: .pvZoomFit, object: nil)
+                }
+                .keyboardShortcut("0", modifiers: [.command])
+                Button("Actual Size") {
+                    NotificationCenter.default.post(name: .pvZoomActual, object: nil)
+                }
+                .keyboardShortcut("1", modifiers: [.command])
+            }
         }
     }
 
