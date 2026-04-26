@@ -31,12 +31,14 @@ ctx.fill(CGRect(x: 0, y: 0, width: logicalW, height: logicalH))
 // 对应 CG y = logicalH - 180 = 200
 let iconRowCGY: CGFloat = logicalH - 180
 
-// 中间的箭头,从图标中间偏右一点指到 Applications 那一侧
-let shaftStartX: CGFloat = 220
-let shaftEndX: CGFloat = 320
+// 中间的箭头,短一点,灰色
+let arrowMidX: CGFloat = 270
+let shaftHalf: CGFloat = 24
+let shaftStartX: CGFloat = arrowMidX - shaftHalf
+let shaftEndX: CGFloat = arrowMidX + shaftHalf
 
-ctx.setStrokeColor(red: 4/255, green: 71/255, blue: 53/255, alpha: 0.85)
-ctx.setLineWidth(3.5)
+ctx.setStrokeColor(red: 0.55, green: 0.55, blue: 0.55, alpha: 1.0)
+ctx.setLineWidth(3.0)
 ctx.setLineCap(.round)
 ctx.setLineJoin(.round)
 
@@ -46,7 +48,7 @@ ctx.addLine(to: CGPoint(x: shaftEndX, y: iconRowCGY))
 ctx.strokePath()
 
 // 箭头头
-let headLen: CGFloat = 12
+let headLen: CGFloat = 9
 ctx.move(to: CGPoint(x: shaftEndX - headLen, y: iconRowCGY + headLen))
 ctx.addLine(to: CGPoint(x: shaftEndX, y: iconRowCGY))
 ctx.addLine(to: CGPoint(x: shaftEndX - headLen, y: iconRowCGY - headLen))
