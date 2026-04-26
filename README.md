@@ -8,6 +8,8 @@ A Mac image viewer. Switch images with arrow keys.
 
 Requires macOS 14 (Sonoma) or later.
 
+![PendView screenshot](docs/screenshot.png)
+
 ## Download / 下载
 
 [Releases](https://github.com/syncmeta/PendView/releases)
