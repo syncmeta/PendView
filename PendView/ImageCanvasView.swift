@@ -35,13 +35,11 @@ struct ImageCanvasView: NSViewRepresentable {
         iv.imageScaling = .scaleNone
         iv.imageAlignment = .alignCenter
         iv.image = image
-        iv.frame = NSRect(origin: .zero, size: image.size)
+        iv.frame = NSRect(origin: .zero, size: imageDocSize(image))
         scroll.documentView = iv
 
         context.coordinator.scrollView = scroll
-        context.coordinator.subscribe()
-        // 第一次有尺寸后再 fit
-        DispatchQueue.main.async { context.coordinator.fitToWindow() }
+        context.coordinator.bind()
         return scroll
     }
 
@@ -49,25 +47,55 @@ struct ImageCanvasView: NSViewRepresentable {
         guard let iv = scrollView.documentView as? NSImageView else { return }
         if iv.image !== image {
             iv.image = image
-            iv.frame = NSRect(origin: .zero, size: image.size)
-            DispatchQueue.main.async { context.coordinator.fitToWindow() }
+            iv.frame = NSRect(origin: .zero, size: imageDocSize(image))
+            context.coordinator.markFittedAndFit()
         }
+    }
+
+    /// 优先用像素尺寸,避免 EXIF/@2x 让 NSImage.size 给出"逻辑半值"
+    private func imageDocSize(_ image: NSImage) -> NSSize {
+        if let rep = image.representations.first,
+           rep.pixelsWide > 0, rep.pixelsHigh > 0 {
+            return NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+        }
+        return image.size
     }
 
     final class Coordinator: NSObject {
         weak var scrollView: NSScrollView?
         private var subs = Set<AnyCancellable>()
+        private var observers: [NSObjectProtocol] = []
+        /// true = 当前处于"适应窗口"状态;窗口缩放时自动重新 fit
+        private var isFitted: Bool = true
 
-        func subscribe() {
+        deinit {
+            observers.forEach { NotificationCenter.default.removeObserver($0) }
+        }
+
+        func bind() {
             let nc = NotificationCenter.default
             nc.publisher(for: .pvZoomIn)
                 .sink { [weak self] _ in self?.zoom(by: 1.5) }.store(in: &subs)
             nc.publisher(for: .pvZoomOut)
                 .sink { [weak self] _ in self?.zoom(by: 1.0/1.5) }.store(in: &subs)
             nc.publisher(for: .pvZoomFit)
-                .sink { [weak self] _ in self?.fitToWindow() }.store(in: &subs)
+                .sink { [weak self] _ in self?.markFittedAndFit() }.store(in: &subs)
             nc.publisher(for: .pvZoomActual)
                 .sink { [weak self] _ in self?.actualSize() }.store(in: &subs)
+
+            guard let sv = scrollView else { return }
+            sv.contentView.postsFrameChangedNotifications = true
+            let obs = nc.addObserver(
+                forName: NSView.frameDidChangeNotification,
+                object: sv.contentView, queue: .main
+            ) { [weak self] _ in
+                guard let self else { return }
+                if self.isFitted { self.fitToWindow() }
+            }
+            observers.append(obs)
+
+            // 初次布局完成后再 fit
+            DispatchQueue.main.async { [weak self] in self?.fitToWindow() }
         }
 
         func zoom(by factor: CGFloat) {
@@ -75,11 +103,19 @@ struct ImageCanvasView: NSViewRepresentable {
             let center = NSPoint(x: sv.contentView.bounds.midX,
                                  y: sv.contentView.bounds.midY)
             sv.setMagnification(sv.magnification * factor, centeredAt: center)
+            isFitted = false
+        }
+
+        /// 切换图片时调用:即使上次用户手动放大过,新图回到 fit
+        func markFittedAndFit() {
+            isFitted = true
+            fitToWindow()
         }
 
         func fitToWindow() {
             guard let sv = scrollView, let doc = sv.documentView else { return }
-            let viewport = sv.contentView.bounds.size
+            // 视口要用屏幕点(frame.size),不用文档坐标(bounds.size)
+            let viewport = sv.contentView.frame.size
             let imageSize = doc.frame.size
             guard viewport.width > 0, viewport.height > 0,
                   imageSize.width > 0, imageSize.height > 0 else { return }
@@ -87,12 +123,8 @@ struct ImageCanvasView: NSViewRepresentable {
                             viewport.height / imageSize.height,
                             1.0)
             sv.magnification = scale
-            // 居中显示
-            sv.contentView.scroll(to: NSPoint(
-                x: (imageSize.width - viewport.width / scale) / 2,
-                y: (imageSize.height - viewport.height / scale) / 2
-            ))
-            sv.reflectScrolledClipView(sv.contentView)
+            // CenteringClipView 自动负 origin 居中;不要手动 scroll
+            isFitted = true
         }
 
         func actualSize() {
@@ -100,6 +132,7 @@ struct ImageCanvasView: NSViewRepresentable {
             sv.setMagnification(1.0,
                 centeredAt: NSPoint(x: sv.contentView.bounds.midX,
                                     y: sv.contentView.bounds.midY))
+            isFitted = false
         }
     }
 }

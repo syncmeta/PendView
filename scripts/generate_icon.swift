@@ -10,10 +10,48 @@ let projectRoot = scriptURL.deletingLastPathComponent().deletingLastPathComponen
 let svgURL = URL(fileURLWithPath: "\(projectRoot)/icon.svg")
 let outDir = "\(projectRoot)/PendView/Assets.xcassets/AppIcon.appiconset"
 
-guard let svgImage = NSImage(contentsOf: svgURL) else {
+// macOS 的 NSImage SVG 渲染器忽略 CSS 的 display:none —— 那些"在 Illustrator
+// 里隐藏的辅助元素"会被照常画出。先扫一遍 CSS 找出 display:none 的 class,把
+// 用了这些 class 的元素从 SVG 里剥掉再交给 NSImage。
+let rawSVG = (try? String(contentsOf: svgURL, encoding: .utf8)) ?? ""
+var hidden: Set<String> = []
+do {
+    let blockRegex = try! NSRegularExpression(
+        pattern: #"([.\w,\s]+)\{([^}]*)\}"#)
+    let nsCSS = rawSVG as NSString
+    let matches = blockRegex.matches(
+        in: rawSVG, range: NSRange(location: 0, length: nsCSS.length))
+    for m in matches {
+        let body = nsCSS.substring(with: m.range(at: 2))
+        let normalized = body.components(separatedBy: .whitespacesAndNewlines).joined()
+        guard normalized.contains("display:none") else { continue }
+        let sel = nsCSS.substring(with: m.range(at: 1))
+        for piece in sel.split(separator: ",") {
+            let trimmed = piece.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix(".") {
+                hidden.insert(String(trimmed.dropFirst()))
+            }
+        }
+    }
+}
+var strippedSVG = rawSVG
+for cls in hidden {
+    let pattern = #"<[a-zA-Z]+[^>]*\bclass="\#(cls)"[^>]*/>"#
+    strippedSVG = strippedSVG.replacingOccurrences(
+        of: pattern, with: "", options: .regularExpression)
+}
+if !hidden.isEmpty {
+    let list = hidden.sorted().joined(separator: ", ")
+    print("剥掉隐藏 class 元素: \(list)")
+}
+let cleanedSVGURL = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("pendview-icon-\(UUID().uuidString).svg")
+try strippedSVG.write(to: cleanedSVGURL, atomically: true, encoding: .utf8)
+defer { try? FileManager.default.removeItem(at: cleanedSVGURL) }
+
+guard let svgImage = NSImage(contentsOf: cleanedSVGURL) else {
     fputs("无法加载 \(svgURL.path)\n", stderr); exit(1)
 }
-// 让 NSImage 知道这是矢量,缩放时按目标尺寸重渲染
 svgImage.size = NSSize(width: 1024, height: 1024)
 
 func renderPNG(px: Int) -> Data {
@@ -27,6 +65,16 @@ func renderPNG(px: Int) -> Data {
     ) else { fatalError("ctx") }
 
     ctx.interpolationQuality = .high
+
+    // macOS 应用图标的圆角约为图标边长的 22.37%
+    let cornerRadius = size * 0.2237
+    let bounds = CGRect(x: 0, y: 0, width: size, height: size)
+    let mask = CGPath(roundedRect: bounds,
+                      cornerWidth: cornerRadius,
+                      cornerHeight: cornerRadius,
+                      transform: nil)
+    ctx.addPath(mask)
+    ctx.clip()
 
     let nsCtx = NSGraphicsContext(cgContext: ctx, flipped: false)
     NSGraphicsContext.saveGraphicsState()
