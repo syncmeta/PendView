@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.10"
-    MARKETING_VERSION: "0.3.0"
-    CURRENT_PROJECT_VERSION: "3"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "4"
     DEVELOPMENT_TEAM: ""
     CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "-"
@@ -39,6 +39,17 @@ targets:
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
             LSItemContentTypes:
+              - public.jpeg
+              - public.png
+              - com.compuserve.gif
+              - public.heic
+              - public.heif
+              - org.webmproject.webp
+              - public.tiff
+              - com.microsoft.bmp
+              - com.microsoft.ico
+              - public.svg-image
+              - public.camera-raw-image
               - public.image
     settings:
       base:
